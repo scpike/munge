@@ -1,0 +1,11 @@
+* Code editing
+** More languages (JS, Clojure, Haskell?)
+* Map framework
+** Split delimited data (pass array to munge)
+** Headers (pass map to munge)
+** State accumulation (return 2 values?)
+* Givens
+  Paste in (yml?, \n separated list?) and have that data available in
+  your functions.
+* Persistence
+  Store code, input, and givens
