@@ -21,8 +21,12 @@
   [:div [:h2 "About munge"]
    [:div [:a {:href "#/"} "go to the home page"]]])
 
-(def code (atom "def munge(x)
-  x.upcase
+(def map-code (atom "def mapfn(x)
+  x.downcase.gsub(/[^\\w\\s]/, '').gsub(' ', '_')
+end"))
+
+(def filter-code (atom "def filterfn(x)
+  x =~ /.*/
 end"))
 
 (def input (atom "New York, New York
@@ -57,45 +61,70 @@ Portland, Oregon"))
 
 (def result (atom ""))
 
-(defn codify
+(defn codify-map
   [s]
   (js/eval (js/Opal.compile s)))
 
+(defn codify-filter
+  [s]
+  (js/eval (js/Opal.compile s)))
+
+(defn filter-with-nil
+  [f coll]
+  (println (f (first coll)))
+  (filter #(and (f %)
+                (not= js/Opal.NilClass (.-_klass (f %))))
+          coll))
+
 (defn munge
   [& e]
-  (let [f-js (codify @code)
-        f #(js/Opal.Object.$munge %)
-        results (map f (clojure.string/split @input #"\n" ))]
-    (reset! result (->> results
-                       (remove clojure.string/blank?)
-                       (clojure.string/join  "\n")))))
-
+  (let [f-js (codify-map @map-code)
+        filter-js (codify-filter @filter-code)
+        mapfn #(js/Opal.Object.$mapfn %)
+        filterfn #(js/Opal.Object.$filterfn %)
+        input (clojure.string/split @input #"\n" )]
+    (reset! result (->> input
+                        (filter-with-nil filterfn)
+                        (map mapfn)
+                        (remove clojure.string/blank?)
+                        (clojure.string/join  "\n")))))
+(munge)
 
 (defn make-codemirror
-  [text-area-node]
+  [atm text-area-node]
   ; Have to use js-obj, passing a map as opts doesn't work
   (let [opts (js-obj "mode" "ruby" "lineNumbers" true "keyMap" "emacs")
         cm (js/CodeMirror.fromTextArea text-area-node opts )]
-    (.on cm "change" #(reset! code (-> % .getValue)))
-    ))
+    (.on cm "change" #(reset! atm (-> % .getValue)))))
 
-(def codemirror
+(defn codemirror
+  [atm]
   (with-meta identity
-    {:component-did-mount #(make-codemirror (reagent/dom-node %))}))
+    {:component-did-mount #(make-codemirror atm (reagent/dom-node %))}))
 
-(defn code-input []
-  (fn []
-    [codemirror
-     [:textarea {:rows 20
-                 :cols 40
-                 :defaultValue @code }]]))
+(defn code-input [atm]
+  [(codemirror atm)
+   [:textarea {:rows 20
+               :cols 40
+               :defaultValue (deref atm) }]])
+
+(def map-code-input
+  (code-input map-code))
+
+(def filter-code-input
+  (code-input filter-code))
 
 (defn munge-it []
-  [:div { :class "container" } [:h2 "Munge yourself some data"]
-   [:h2 "Code"]
-   [:p "Write some ruby which defines a function `munge`."]
+  [:div { :class "container" } [:h1 "Munge yourself some data"]
    [:div { :class "row" }
-    [:div { :class "col-md-12"} [code-input]]]
+    [:div {:class "col-md-6"}
+     [:h2 "Filter"]
+     [:p "Return true to allow a row through."]
+     filter-code-input]
+    [:div {:class "col-md-6"}
+     [:h2 "Map"]
+     [:p "Write some ruby which defines a function `mapfn`."]
+     map-code-input]]
    [:div { :class "row" }
     [:div { :class "col-md-12"} [:input {:type "button" :value "Munge away!"
                                          :class "btn-default btn"
